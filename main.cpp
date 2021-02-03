@@ -11,7 +11,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define FONT_SZ 13.0f
+#define FONT_SZ 14.0f
 
 #include "imgui/imgui.h"
 #include "backend/imgui_impl_glfw.h"
@@ -34,16 +34,19 @@ static void glfw_error_callback(int error, const char *description)
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
+cpu_6502 *cpu; // our cpu!
+
+bool cpu_running = false;
+
 static ImFont *HexWinFont;
 
-void TestWindow()
+void CodeEditor()
 {
-    ImGui::Begin("Hex print");
-    static int arr[1024];
+    ImGui::Begin("RAM Viewer and Editor");
     static int baddr = 0x0;
-    static int rc[] = {8, 8};
+    static int rc[] = {16, 16};
     float win_sz_x = (6 + rc[1] * 2) * FONT_SZ;
-    float win_sz_y = (4 + rc[0]) * (FONT_SZ + 6); 
+    float win_sz_y = (4 + rc[0]) * (FONT_SZ + 6);
     if (win_sz_x < (6 + 3 * 2) * FONT_SZ)
         win_sz_x = (6 + 3 * 2) * FONT_SZ;
     ImGui::SetWindowSize(ImVec2(win_sz_x, win_sz_y));
@@ -76,7 +79,7 @@ void TestWindow()
     ImGui::SetColumnWidth(0, 4 * FONT_SZ);
     for (int i = 1; i < rc[1] + 1; i++)
         ImGui::SetColumnWidth(i, 2 * FONT_SZ);
-    
+
     for (int i = -1; i < rc[0]; i++)
     {
         if (i < 0) // print header
@@ -103,25 +106,15 @@ void TestWindow()
                     if (ImGui::SelectableInput("baddr", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
                     {
                         unsigned short num = strtol(tmp, NULL, 16);
-                        if (num > sizeof(arr) || num < 0)
-                            num = 0;
+                        if (num + rc[0] * rc[1] > (int) MAX_MEM_SZ)
+                            num = MAX_MEM_SZ - rc[0] * rc[1];
                         baddr = num;
                     }
-                    // char label[32];
-                    // snprintf(label, 32, "0x%04X", baddr);
-                    // if (ImGui::Selectable(label))
-                    // {
-                    // }
                     ImGui::NextColumn();
                 }
                 else
                 {
                     ImGui::Text("0x%04X", baddr + rc[1] * i);
-                    // char label[32];
-                    // snprintf(label, 32, "0x%04X", baddr + 16 * i);
-                    // if (ImGui::Selectable(label))
-                    // {
-                    // }
                     ImGui::NextColumn();
                 }
             }
@@ -130,19 +123,22 @@ void TestWindow()
                 char label[32];
                 snprintf(label, 32, "mem_%d_%d", i, j);
                 char tmp[10];
-                snprintf(tmp, sizeof(tmp), "%02X", arr[baddr + rc[1] * i + j]);
-                if (ImGui::SelectableInput(label, false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
+                int local_mem_idx = baddr + rc[1] * i + j;
+                snprintf(tmp, sizeof(tmp), "%02X", cpu->mem[local_mem_idx]);
+                if (!cpu_running)
                 {
-                    unsigned short num = strtol(tmp, NULL, 16);
-                    if (num > 0xff || num < 0)
-                        num = 0;
-                    arr[baddr + rc[1] * i + j] = num;
+                    if (ImGui::SelectableInput(label, false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
+                    {
+                        unsigned short num = strtol(tmp, NULL, 16);
+                        if (num > 0xff)
+                            num = 0;
+                        cpu->mem[local_mem_idx] = num;
+                    }
                 }
-                // char label[32];
-                // snprintf(label, 32, "0x%02x", arr[baddr + 16 * i + j]);
-                // if (ImGui::Selectable(label))
-                // {
-                // }
+                else
+                {
+                    ImGui::Selectable(tmp, false);
+                }
                 ImGui::NextColumn();
             }
         }
@@ -154,6 +150,8 @@ void TestWindow()
 
 int main(int, char **)
 {
+    // malloc CPU
+    cpu = (cpu_6502 *)malloc(sizeof(cpu_6502));
     // Setup window
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
@@ -265,7 +263,7 @@ int main(int, char **)
             ImGui::End();
         }
 
-        TestWindow();
+        CodeEditor();
 
         // Rendering
         ImGui::Render();
@@ -305,5 +303,6 @@ int main(int, char **)
     glfwDestroyWindow(window);
     glfwTerminate();
 
+    free(cpu);
     return 0;
 }
