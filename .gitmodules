@@ -1,0 +1,7 @@
+[submodule "mos6502"]
+	path = mos6502
+	url = git@github.com:sunipkmukherjee/mos6502.git
+[submodule "imgui"]
+	path = imgui
+	url = git@github.com:sunipkmukherjee/imgui.git
+	branch = docking
