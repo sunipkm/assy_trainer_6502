@@ -11,7 +11,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define FONT_SZ 12.0f
+#define FONT_SZ 13.0f
 
 #include "imgui/imgui.h"
 #include "backend/imgui_impl_glfw.h"
@@ -34,23 +34,28 @@ static void glfw_error_callback(int error, const char *description)
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
+static ImFont *HexWinFont;
+
 void TestWindow()
 {
     ImGui::Begin("Hex print");
     static int arr[1024];
     static int baddr = 0x0;
-    static int rc[] = {16, 8};
-    // static ImVec2 win_sz = ImVec2((3+rc[0]) * FONT_SZ, (6 + rc[1] * 4) * FONT_SZ);
-    // ImGui::SetWindowSize(win_sz);
+    static int rc[] = {8, 8};
+    float win_sz_x = (6 + rc[1] * 2) * FONT_SZ;
+    float win_sz_y = (4 + rc[0]) * (FONT_SZ + 6); 
+    if (win_sz_x < (6 + 3 * 2) * FONT_SZ)
+        win_sz_x = (6 + 3 * 2) * FONT_SZ;
+    ImGui::SetWindowSize(ImVec2(win_sz_x, win_sz_y));
     char buf[3];
     ImGui::Text("Rows: ");
     ImGui::SameLine();
     snprintf(buf, sizeof(buf), "%d", rc[0]);
-    ImGui::PushItemWidth(2*FONT_SZ);
+    ImGui::PushItemWidth(2 * FONT_SZ);
     if (ImGui::InputText("##Row", buf, IM_ARRAYSIZE(buf), ImGuiInputTextFlags_EnterReturnsTrue))
     {
         int tmp = strtol(buf, NULL, 10);
-        if (tmp > 0 && tmp < 99)
+        if (tmp > 0 && tmp < 31)
             rc[0] = tmp;
     }
     ImGui::PopItemWidth();
@@ -58,19 +63,20 @@ void TestWindow()
     ImGui::Text("Cols: ");
     ImGui::SameLine();
     snprintf(buf, sizeof(buf), "%d", rc[1]);
-    ImGui::PushItemWidth(2*FONT_SZ);
+    ImGui::PushItemWidth(2 * FONT_SZ);
     if (ImGui::InputText("##Col", buf, IM_ARRAYSIZE(buf), ImGuiInputTextFlags_EnterReturnsTrue))
     {
         int tmp = strtol(buf, NULL, 10);
-        if (tmp > 0 && tmp < 99)
+        if (tmp > 0 && tmp < 17)
         {
             rc[1] = tmp;
         }
     }
     ImGui::Columns(rc[1] + 1, "Offsets", false);
-    ImGui::SetColumnWidth(0, 6 * FONT_SZ);
+    ImGui::SetColumnWidth(0, 4 * FONT_SZ);
     for (int i = 1; i < rc[1] + 1; i++)
-        ImGui::SetColumnWidth(0, 4 * FONT_SZ);
+        ImGui::SetColumnWidth(i, 2 * FONT_SZ);
+    
     for (int i = -1; i < rc[0]; i++)
     {
         if (i < 0) // print header
@@ -82,6 +88,7 @@ void TestWindow()
                 ImGui::Text("%02X", j);
                 ImGui::NextColumn();
             }
+            ImGui::PushFont(HexWinFont);
             ImGui::Separator();
             continue;
         }
@@ -123,7 +130,7 @@ void TestWindow()
                 char label[32];
                 snprintf(label, 32, "mem_%d_%d", i, j);
                 char tmp[10];
-                snprintf(tmp, sizeof(tmp), "0x%02X", arr[baddr + rc[1] * i + j]);
+                snprintf(tmp, sizeof(tmp), "%02X", arr[baddr + rc[1] * i + j]);
                 if (ImGui::SelectableInput(label, false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
                 {
                     unsigned short num = strtol(tmp, NULL, 16);
@@ -141,6 +148,7 @@ void TestWindow()
         }
     }
     ImGui::Columns(1);
+    ImGui::PopFont();
     ImGui::End();
 }
 
@@ -193,6 +201,7 @@ int main(int, char **)
     // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
     //io.Fonts->AddFontDefault();
     io.Fonts->AddFontFromFileTTF("imgui/font/Roboto-Medium.ttf", FONT_SZ);
+    HexWinFont = io.Fonts->AddFontFromFileTTF("imgui/font/FiraCode-Regular.ttf", FONT_SZ);
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/ProggyTiny.ttf", 10.0f);
