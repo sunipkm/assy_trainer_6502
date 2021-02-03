@@ -11,6 +11,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#define FONT_SZ 12.0f
+
 #include "imgui/imgui.h"
 #include "backend/imgui_impl_glfw.h"
 #include "backend/imgui_impl_opengl2.h"
@@ -37,14 +39,45 @@ void TestWindow()
     ImGui::Begin("Hex print");
     static int arr[1024];
     static int baddr = 0x0;
-    ImGui::Columns(17, "Offsets", false);
-    for (int i = -1; i < 16; i++)
+    static int rc[] = {16, 8};
+    // static ImVec2 win_sz = ImVec2((3+rc[0]) * FONT_SZ, (6 + rc[1] * 4) * FONT_SZ);
+    // ImGui::SetWindowSize(win_sz);
+    char buf[3];
+    ImGui::Text("Rows: ");
+    ImGui::SameLine();
+    snprintf(buf, sizeof(buf), "%d", rc[0]);
+    ImGui::PushItemWidth(2*FONT_SZ);
+    if (ImGui::InputText("##Row", buf, IM_ARRAYSIZE(buf), ImGuiInputTextFlags_EnterReturnsTrue))
+    {
+        int tmp = strtol(buf, NULL, 10);
+        if (tmp > 0 && tmp < 99)
+            rc[0] = tmp;
+    }
+    ImGui::PopItemWidth();
+    ImGui::SameLine();
+    ImGui::Text("Cols: ");
+    ImGui::SameLine();
+    snprintf(buf, sizeof(buf), "%d", rc[1]);
+    ImGui::PushItemWidth(2*FONT_SZ);
+    if (ImGui::InputText("##Col", buf, IM_ARRAYSIZE(buf), ImGuiInputTextFlags_EnterReturnsTrue))
+    {
+        int tmp = strtol(buf, NULL, 10);
+        if (tmp > 0 && tmp < 99)
+        {
+            rc[1] = tmp;
+        }
+    }
+    ImGui::Columns(rc[1] + 1, "Offsets", false);
+    ImGui::SetColumnWidth(0, 6 * FONT_SZ);
+    for (int i = 1; i < rc[1] + 1; i++)
+        ImGui::SetColumnWidth(0, 4 * FONT_SZ);
+    for (int i = -1; i < rc[0]; i++)
     {
         if (i < 0) // print header
         {
             ImGui::Text("Base");
             ImGui::NextColumn();
-            for (int j = 0; j < 16; j++)
+            for (int j = 0; j < rc[1]; j++)
             {
                 ImGui::Text("%02X", j);
                 ImGui::NextColumn();
@@ -52,7 +85,7 @@ void TestWindow()
             ImGui::Separator();
             continue;
         }
-        for (int j = -1; j < 16; j++)
+        for (int j = -1; j < rc[1]; j++)
         {
             if (j < 0) // address
             {
@@ -76,7 +109,7 @@ void TestWindow()
                 }
                 else
                 {
-                    ImGui::Text("0x%04X", baddr + 16 * i);
+                    ImGui::Text("0x%04X", baddr + rc[1] * i);
                     // char label[32];
                     // snprintf(label, 32, "0x%04X", baddr + 16 * i);
                     // if (ImGui::Selectable(label))
@@ -88,15 +121,15 @@ void TestWindow()
             else
             {
                 char label[32];
-                snprintf(label, 32, "obj_%d_%d", i, j);
+                snprintf(label, 32, "mem_%d_%d", i, j);
                 char tmp[10];
-                snprintf(tmp, sizeof(tmp), "0x%02X", arr[baddr + 16 * i + j]);
+                snprintf(tmp, sizeof(tmp), "0x%02X", arr[baddr + rc[1] * i + j]);
                 if (ImGui::SelectableInput(label, false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
                 {
                     unsigned short num = strtol(tmp, NULL, 16);
                     if (num > 0xff || num < 0)
                         num = 0;
-                    arr[baddr + 16 * i + j] = num;
+                    arr[baddr + rc[1] * i + j] = num;
                 }
                 // char label[32];
                 // snprintf(label, 32, "0x%02x", arr[baddr + 16 * i + j]);
@@ -159,7 +192,7 @@ int main(int, char **)
     // - Read 'docs/FONTS.md' for more instructions and details.
     // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
     //io.Fonts->AddFontDefault();
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
+    io.Fonts->AddFontFromFileTTF("imgui/font/Roboto-Medium.ttf", FONT_SZ);
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/ProggyTiny.ttf", 10.0f);
