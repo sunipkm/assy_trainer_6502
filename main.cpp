@@ -8,6 +8,8 @@
 // See imgui_impl_glfw.cpp for details.
 
 #include "mos6502/c_6502.h" // 6502 CPU emulation
+#include <string.h>
+#include <stdlib.h>
 
 #include "imgui/imgui.h"
 #include "backend/imgui_impl_glfw.h"
@@ -25,18 +27,97 @@
 #pragma comment(lib, "legacy_stdio_definitions")
 #endif
 
-static void glfw_error_callback(int error, const char* description)
+static void glfw_error_callback(int error, const char *description)
 {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
-int main(int, char**)
+void TestWindow()
+{
+    ImGui::Begin("Hex print");
+    static int arr[1024];
+    static int baddr = 0x0;
+    ImGui::Columns(17, "Offsets", false);
+    for (int i = -1; i < 16; i++)
+    {
+        if (i < 0) // print header
+        {
+            ImGui::Text("Base");
+            ImGui::NextColumn();
+            for (int j = 0; j < 16; j++)
+            {
+                ImGui::Text("%02X", j);
+                ImGui::NextColumn();
+            }
+            ImGui::Separator();
+            continue;
+        }
+        for (int j = -1; j < 16; j++)
+        {
+            if (j < 0) // address
+            {
+                if (i == 0) // selectable base address
+                {
+                    char tmp[10];
+                    snprintf(tmp, sizeof(tmp), "0x%04X", baddr);
+                    if (ImGui::SelectableInput("baddr", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
+                    {
+                        unsigned short num = strtol(tmp, NULL, 16);
+                        if (num > sizeof(arr) || num < 0)
+                            num = 0;
+                        baddr = num;
+                    }
+                    // char label[32];
+                    // snprintf(label, 32, "0x%04X", baddr);
+                    // if (ImGui::Selectable(label))
+                    // {
+                    // }
+                    ImGui::NextColumn();
+                }
+                else
+                {
+                    ImGui::Text("0x%04X", baddr + 16 * i);
+                    // char label[32];
+                    // snprintf(label, 32, "0x%04X", baddr + 16 * i);
+                    // if (ImGui::Selectable(label))
+                    // {
+                    // }
+                    ImGui::NextColumn();
+                }
+            }
+            else
+            {
+                char label[32];
+                snprintf(label, 32, "obj_%d_%d", i, j);
+                char tmp[10];
+                snprintf(tmp, sizeof(tmp), "0x%02X", arr[baddr + 16 * i + j]);
+                if (ImGui::SelectableInput(label, false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
+                {
+                    unsigned short num = strtol(tmp, NULL, 16);
+                    if (num > 0xff || num < 0)
+                        num = 0;
+                    arr[baddr + 16 * i + j] = num;
+                }
+                // char label[32];
+                // snprintf(label, 32, "0x%02x", arr[baddr + 16 * i + j]);
+                // if (ImGui::Selectable(label))
+                // {
+                // }
+                ImGui::NextColumn();
+            }
+        }
+    }
+    ImGui::Columns(1);
+    ImGui::End();
+}
+
+int main(int, char **)
 {
     // Setup window
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
         return 1;
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+OpenGL2 example", NULL, NULL);
+    GLFWwindow *window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+OpenGL2 example", NULL, NULL);
     if (window == NULL)
         return 1;
     glfwMakeContextCurrent(window);
@@ -45,11 +126,12 @@ int main(int, char**)
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;       // Enable Keyboard Controls
+    ImGuiIO &io = ImGui::GetIO();
+    (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
     //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
-    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // Enable Docking
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
     //io.ConfigViewportsNoAutoMerge = true;
     //io.ConfigViewportsNoTaskBarIcon = true;
 
@@ -58,7 +140,7 @@ int main(int, char**)
     //ImGui::StyleColorsClassic();
 
     // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
-    ImGuiStyle& style = ImGui::GetStyle();
+    ImGuiStyle &style = ImGui::GetStyle();
     if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
     {
         style.WindowRounding = 0.0f;
@@ -113,16 +195,16 @@ int main(int, char**)
             static float f = 0.0f;
             static int counter = 0;
 
-            ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
+            ImGui::Begin("Hello, world!"); // Create a window called "Hello, world!" and append into it.
 
-            ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-            ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
+            ImGui::Text("This is some useful text.");          // Display some text (you can use a format strings too)
+            ImGui::Checkbox("Demo Window", &show_demo_window); // Edit bools storing our window open/close state
             ImGui::Checkbox("Another Window", &show_another_window);
 
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-            ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
+            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);             // Edit 1 float using a slider from 0.0f to 1.0f
+            ImGui::ColorEdit3("clear color", (float *)&clear_color); // Edit 3 floats representing a color
 
-            if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
+            if (ImGui::Button("Button")) // Buttons return true when clicked (most widgets return true when edited/activated)
                 counter++;
             ImGui::SameLine();
             ImGui::Text("counter = %d", counter);
@@ -134,12 +216,14 @@ int main(int, char**)
         // 3. Show another simple window.
         if (show_another_window)
         {
-            ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
+            ImGui::Begin("Another Window", &show_another_window); // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
             ImGui::Text("Hello from another window!");
             if (ImGui::Button("Close Me"))
                 show_another_window = false;
             ImGui::End();
         }
+
+        TestWindow();
 
         // Rendering
         ImGui::Render();
@@ -162,7 +246,7 @@ int main(int, char**)
         //  For this specific demo app we could also call glfwMakeContextCurrent(window) directly)
         if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
         {
-            GLFWwindow* backup_current_context = glfwGetCurrentContext();
+            GLFWwindow *backup_current_context = glfwGetCurrentContext();
             ImGui::UpdatePlatformWindows();
             ImGui::RenderPlatformWindowsDefault();
             glfwMakeContextCurrent(backup_current_context);
