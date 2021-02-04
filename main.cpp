@@ -256,7 +256,7 @@ void CPURun()
     ImGui::SetWindowSize(ImVec2(win_sz_x, win_sz_y));
     static char cpustatus[128];
     snprintf(cpustatus, sizeof(cpustatus), "Status: %s", cpu_stepping ? "Stepping" : (cpu_running ? "Running" : "Paused"));
-    ImGui::Text(cpustatus);
+    ImGui::Text("%s", cpustatus);
     ImGui::SameLine();
     char tmp[25];
     ImGui::Text("Instruction Time: ");
@@ -493,7 +493,7 @@ void CodeEditor(bool *active)
     static int baddr = 0x8000;
     static int rc[] = {16, 16};
     float win_sz_x = (6 + rc[1] * 2) * font_scale * FONT_SZ;
-    float win_sz_y = (4 + rc[0]) * font_scale * (FONT_SZ + 6);
+    float win_sz_y = (4 + rc[0]) * font_scale * (FONT_SZ + 6 / font_scale);
     if (win_sz_x < (6 + 3 * 2) * font_scale * FONT_SZ)
         win_sz_x = (6 + 3 * 2) * font_scale * FONT_SZ;
     ImGui::SetWindowSize(ImVec2(win_sz_x, win_sz_y));
