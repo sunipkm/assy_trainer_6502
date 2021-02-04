@@ -257,10 +257,18 @@ void CPURun()
 
     ImGui::Begin("MOS6502");
     static float font_scale = 1.0f / FONT_SCALE;
-    ImGui::SetWindowFontScale(font_scale);
-    float win_sz_x = (5 + 8 * 2) * font_scale * FONT_SZ;
-    float win_sz_y = 18 * font_scale * (FONT_SZ + 6 / font_scale);
+    static float usr_font_scale = 1.0f;
+    ImGui::SetWindowFontScale(font_scale * usr_font_scale);
+    float win_sz_x = (5 + 8 * 2) * font_scale * usr_font_scale * FONT_SZ;
+    float win_sz_y = 19 * font_scale * usr_font_scale * (FONT_SZ + 6 / font_scale / usr_font_scale);
     ImGui::SetWindowSize(ImVec2(win_sz_x, win_sz_y));
+    float __usr_font_scale = usr_font_scale;
+    // ImGui::PushItemWidth(15 * font_scale * usr_font_scale * FONT_SZ);
+    if(ImGui::InputFloat("Text Size", &__usr_font_scale, 0.1, 0.5, "%.1f"))
+    {
+        if (__usr_font_scale < 0.5)
+            __usr_font_scale = 0.5;
+    }
     static char cpustatus[128];
     snprintf(cpustatus, sizeof(cpustatus), "Status: %s", cpu_stepping ? "Stepping" : (cpu_running ? "Running" : "Paused"));
     ImGui::Text("%s", cpustatus);
@@ -269,6 +277,7 @@ void CPURun()
     ImGui::Text("Instruction Time: ");
     ImGui::SameLine();
     snprintf(tmp, sizeof(tmp), "%llu ms", cpu_time / 1000);
+    ImGui::PushStyleColor(0, IMCYN);
     if (ImGui::SelectableInput("cputime", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
     {
         unsigned long long num = strtoll(tmp, NULL, 10);
@@ -278,8 +287,11 @@ void CPURun()
             num = 17;
         cpu_time = num * 1000;
     }
+    ImGui::PopStyleColor();
+    ImGui::PushStyleColor(0, IMYLW);
     ImGui::Separator();
-    CPURegisters(font_scale);
+    ImGui::PopStyleColor();
+    CPURegisters(font_scale * usr_font_scale);
     if (ImGui::Button("Reset CPU"))
     {
         cpu_running = false;
@@ -352,6 +364,7 @@ void CPURun()
     ImGui::Text("Reset Vector: ");
     ImGui::NextColumn();
     snprintf(tmp, sizeof(tmp), "0x%04X", RESET_VEC);
+    ImGui::PushStyleColor(0, IMCYN);
     if (ImGui::SelectableInput("resetvec", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
     {
         word num = strtoll(tmp, NULL, 16);
@@ -361,10 +374,12 @@ void CPURun()
             num = 0x400;
         RESET_VEC = num;
     }
+    ImGui::PopStyleColor();
     ImGui::NextColumn();
     ImGui::Text("NMI Vector: ");
     ImGui::NextColumn();
     snprintf(tmp, sizeof(tmp), "0x%04X", NMI_VEC);
+    ImGui::PushStyleColor(0, IMCYN);
     if (ImGui::SelectableInput("nmivec", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
     {
         word num = strtoll(tmp, NULL, 16);
@@ -374,10 +389,12 @@ void CPURun()
             num = 0x200;
         NMI_VEC = num;
     }
+    ImGui::PopStyleColor();
     ImGui::NextColumn();
     ImGui::Text("IRQ Vector: ");
     ImGui::NextColumn();
     snprintf(tmp, sizeof(tmp), "0x%04X", IRQ_VEC);
+    ImGui::PushStyleColor(0, IMCYN);
     if (ImGui::SelectableInput("irqvec", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
     {
         word num = strtoll(tmp, NULL, 16);
@@ -387,12 +404,16 @@ void CPURun()
             num = 0x300;
         NMI_VEC = num;
     }
+    ImGui::PopStyleColor();
     ImGui::Columns(1);
+    ImGui::PushStyleColor(0, IMYLW);
     ImGui::Separator();
+    ImGui::PopStyleColor();
     ImGui::Checkbox("Show Memory Editor", &show_mem_editor);
     ImGui::Checkbox("Show Help Info", &show_help_window);
     ImGui::Checkbox("Show GUI Info", &show_gui_settings);
     ImGui::End();
+    usr_font_scale = __usr_font_scale;
 }
 
 void *CPUThread(void *id)
@@ -496,19 +517,27 @@ void CodeEditor(bool *active)
 {
     ImGui::Begin("RAM Viewer and Editor", active);
     static float font_scale = 1.0f / FONT_SCALE;
-    ImGui::SetWindowFontScale(font_scale);
+    static float usr_font_scale = 1.0f;
+    ImGui::SetWindowFontScale(font_scale * usr_font_scale);
     static int baddr = 0x8000;
     static int rc[] = {16, 16};
-    float win_sz_x = (6 + rc[1] * 2) * font_scale * FONT_SZ;
-    float win_sz_y = (4 + rc[0]) * font_scale * (FONT_SZ + 6 / font_scale);
-    if (win_sz_x < (6 + 3 * 2) * font_scale * FONT_SZ)
-        win_sz_x = (6 + 3 * 2) * font_scale * FONT_SZ;
+    float win_sz_x = (6 + rc[1] * 2) * font_scale * usr_font_scale * FONT_SZ;
+    float win_sz_y = (5 + rc[0]) * font_scale * usr_font_scale * (FONT_SZ + 6 / font_scale / usr_font_scale);
+    if (win_sz_x < (6 + 3 * 2) * font_scale * usr_font_scale * FONT_SZ)
+        win_sz_x = (6 + 3 * 2) * font_scale * usr_font_scale * FONT_SZ;
     ImGui::SetWindowSize(ImVec2(win_sz_x, win_sz_y));
+    float __usr_font_scale = usr_font_scale;
+    // ImGui::PushItemWidth(15 * font_scale * usr_font_scale * FONT_SZ);
+    if(ImGui::InputFloat("Text Size", &__usr_font_scale, 0.1, 0.5, "%.1f"))
+    {
+        if (__usr_font_scale < 0.5)
+            __usr_font_scale = 0.5;
+    }
     char buf[3];
     ImGui::Text("Rows: ");
     ImGui::SameLine();
     snprintf(buf, sizeof(buf), "%d", rc[0]);
-    ImGui::PushItemWidth(2 * font_scale * FONT_SZ);
+    ImGui::PushItemWidth(2 * font_scale * usr_font_scale * FONT_SZ);
     if (ImGui::InputText("##Row", buf, IM_ARRAYSIZE(buf), ImGuiInputTextFlags_EnterReturnsTrue))
     {
         int tmp = strtol(buf, NULL, 10);
@@ -520,7 +549,7 @@ void CodeEditor(bool *active)
     ImGui::Text("Cols: ");
     ImGui::SameLine();
     snprintf(buf, sizeof(buf), "%d", rc[1]);
-    ImGui::PushItemWidth(2 * font_scale * FONT_SZ);
+    ImGui::PushItemWidth(2 * font_scale * usr_font_scale * FONT_SZ);
     if (ImGui::InputText("##Col", buf, IM_ARRAYSIZE(buf), ImGuiInputTextFlags_EnterReturnsTrue))
     {
         int tmp = strtol(buf, NULL, 10);
@@ -530,9 +559,9 @@ void CodeEditor(bool *active)
         }
     }
     ImGui::Columns(rc[1] + 1, "Offsets", false);
-    ImGui::SetColumnWidth(0, 4 * font_scale * FONT_SZ);
+    ImGui::SetColumnWidth(0, 4 * font_scale * usr_font_scale * FONT_SZ);
     for (int i = 1; i < rc[1] + 1; i++)
-        ImGui::SetColumnWidth(i, 2 * font_scale * FONT_SZ);
+        ImGui::SetColumnWidth(i, 2 * font_scale * usr_font_scale * FONT_SZ);
 
     for (int i = -1; i < rc[0]; i++)
     {
@@ -560,6 +589,7 @@ void CodeEditor(bool *active)
                     {
                         char tmp[10];
                         snprintf(tmp, sizeof(tmp), "0x%04X", baddr);
+                        ImGui::PushStyleColor(0, IMCYN);
                         if (ImGui::SelectableInput("baddr", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
                         {
                             unsigned short num = strtol(tmp, NULL, 16);
@@ -578,6 +608,7 @@ void CodeEditor(bool *active)
                             if (baddr < 0)
                                 baddr = 0;
                         }
+                        ImGui::PopStyleColor();
                     }
                     else
                     {
@@ -635,6 +666,7 @@ void CodeEditor(bool *active)
     ImGui::Columns(1);
     ImGui::PopFont();
     ImGui::End();
+    usr_font_scale = __usr_font_scale;
 }
 
 void GUISettings(bool *active)
