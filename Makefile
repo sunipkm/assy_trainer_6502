@@ -43,7 +43,7 @@ endif
 
 all: CFLAGS+= -O2
 
-GUITARGET=client.out
+GUITARGET=mos6502.out
 
 COBJS=mos6502/c_6502.o
 
