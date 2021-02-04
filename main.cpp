@@ -551,18 +551,45 @@ void CodeEditor(bool *active)
         }
         for (int j = -1; j < rc[1]; j++)
         {
+            word pcaddr = cpu_running ? cpu->pc : 0x0;
             if (j < 0) // address
             {
                 if (i == 0) // selectable base address
                 {
-                    char tmp[10];
-                    snprintf(tmp, sizeof(tmp), "0x%04X", baddr);
-                    if (ImGui::SelectableInput("baddr", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
+                    if (!cpu_running)
                     {
-                        unsigned short num = strtol(tmp, NULL, 16);
-                        if (num + rc[0] * rc[1] > (int)MAX_MEM_SZ)
-                            num = MAX_MEM_SZ - rc[0] * rc[1];
-                        baddr = num;
+                        char tmp[10];
+                        snprintf(tmp, sizeof(tmp), "0x%04X", baddr);
+                        if (ImGui::SelectableInput("baddr", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
+                        {
+                            unsigned short num = strtol(tmp, NULL, 16);
+                            if (num + rc[0] * rc[1] > (int)MAX_MEM_SZ)
+                                num = MAX_MEM_SZ - rc[0] * rc[1];
+                            baddr = num;
+                        }
+                        float scr = 0.0f;
+                        if ((scr = ImGui::GetIO().MouseWheel) != 0.0) // scroll detected!
+                        {
+                            // scroll max by 1 page
+                            baddr &= 0xff00;
+                            baddr += 0xff * (scr);
+                            if (baddr + rc[0] * rc[1] > (int)MAX_MEM_SZ)
+                                baddr = MAX_MEM_SZ - rc[0] * rc[1];
+                            if (baddr < 0)
+                                baddr = 0;
+                        }
+                    }
+                    else
+                    {
+                        // calculate base address so that current PC falls under a "page"
+                        word tmp_base = pcaddr & 0xff00; // max page
+                        while (pcaddr > tmp_base + rc[0] * rc[1])
+                            tmp_base += rc[0] + rc[1];
+                        baddr = tmp_base;
+                        // move to that base address
+                        char tmp[10];
+                        snprintf(tmp, sizeof(tmp), "0x%04X", baddr);
+                        ImGui::SelectableInput("baddr", false, ImGuiSelectableFlags_Disabled, tmp, IM_ARRAYSIZE(tmp));
                     }
                     ImGui::NextColumn();
                 }
@@ -580,7 +607,7 @@ void CodeEditor(bool *active)
                 int local_mem_idx = baddr + rc[1] * i + j;
                 snprintf(tmp, sizeof(tmp), "%02X", cpu->mem[local_mem_idx]);
                 bool colorpushed = false;
-                if (local_mem_idx == cpu->pc)
+                if (local_mem_idx == pcaddr)
                 {
                     ImGui::PushStyleColor(0, IMGRN);
                     colorpushed = true;
