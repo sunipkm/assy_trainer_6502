@@ -14,7 +14,7 @@
 #include <pthread.h>
 
 #define FONT_SZ 28.0f // max size
-#define FONT_SCALE 2 // default font is FONT_SZ/FONT_SCALE
+#define FONT_SCALE 2  // default font is FONT_SZ/FONT_SCALE
 
 #include "imgui/imgui.h"
 #include "backend/imgui_impl_glfw.h"
@@ -31,6 +31,13 @@
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
 #pragma comment(lib, "legacy_stdio_definitions")
 #endif
+
+const ImVec4 IMRED = ImVec4(1, 0, 0, 1); // RGBA
+const ImVec4 IMGRN = ImVec4(0, 1, 0, 1);
+const ImVec4 IMBLU = ImVec4(0, 0, 1, 1);
+const ImVec4 IMCYN = ImVec4(0, 1, 1, 1);
+const ImVec4 IMYLW = ImVec4(1, 1, 0, 1);
+const ImVec4 IMMGN = ImVec4(1, 0, 1, 1);
 
 static void glfw_error_callback(int error, const char *description)
 {
@@ -249,7 +256,7 @@ void CPURun()
     static word IRQ_VEC = DEFAULT_IRQ;   // default IRQ/BRK handler
 
     ImGui::Begin("MOS6502");
-    static float font_scale = 1.0f/FONT_SCALE;
+    static float font_scale = 1.0f / FONT_SCALE;
     ImGui::SetWindowFontScale(font_scale);
     float win_sz_x = (5 + 8 * 2) * font_scale * FONT_SZ;
     float win_sz_y = 18 * font_scale * (FONT_SZ + 6 / font_scale);
@@ -488,7 +495,7 @@ void CPURegisters(float font_scale)
 void CodeEditor(bool *active)
 {
     ImGui::Begin("RAM Viewer and Editor", active);
-    static float font_scale = 1.0f/FONT_SCALE;
+    static float font_scale = 1.0f / FONT_SCALE;
     ImGui::SetWindowFontScale(font_scale);
     static int baddr = 0x8000;
     static int rc[] = {16, 16};
@@ -572,6 +579,12 @@ void CodeEditor(bool *active)
                 char tmp[10];
                 int local_mem_idx = baddr + rc[1] * i + j;
                 snprintf(tmp, sizeof(tmp), "%02X", cpu->mem[local_mem_idx]);
+                bool colorpushed = false;
+                if (local_mem_idx == cpu->pc)
+                {
+                    ImGui::PushStyleColor(0, IMGRN);
+                    colorpushed = true;
+                }
                 if (!cpu_running)
                 {
                     if (ImGui::SelectableInput(label, false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
@@ -584,8 +597,10 @@ void CodeEditor(bool *active)
                 }
                 else
                 {
-                    ImGui::Selectable(tmp, false);
+                    ImGui::SelectableInput(label, false, ImGuiSelectableFlags_Disabled, tmp, IM_ARRAYSIZE(tmp));
                 }
+                if (colorpushed)
+                    ImGui::PopStyleColor();
                 ImGui::NextColumn();
             }
         }
@@ -598,8 +613,8 @@ void CodeEditor(bool *active)
 void GUISettings(bool *active)
 {
     ImGui::Begin("GUI Settings", active);
-    static float font_scale = 1.0f/FONT_SCALE;
-    ImGui::SetWindowFontScale(font_scale);                                // Create a window called "Hello, world!" and append into it.
+    static float font_scale = 1.0f / FONT_SCALE;
+    ImGui::SetWindowFontScale(font_scale);                               // Create a window called "Hello, world!" and append into it.
     ImGui::ColorEdit3("Change Background Color", (float *)&clear_color); // Edit 3 floats representing a color
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
     ImGui::End();
@@ -608,7 +623,7 @@ void GUISettings(bool *active)
 void HelpWindow(bool *active)
 {
     ImGui::Begin("Information", active);
-    static float font_scale = 1.0f/FONT_SCALE;
+    static float font_scale = 1.0f / FONT_SCALE;
     ImGui::SetWindowFontScale(font_scale);
     ImGui::SetWindowSize(ImVec2(80 * font_scale * FONT_SZ, 24 * font_scale * FONT_SZ));
     ImGui::Text("MOS6502 Emulator");
