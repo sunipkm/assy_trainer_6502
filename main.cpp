@@ -10,8 +10,11 @@
 #include "mos6502/c_6502.h" // 6502 CPU emulation
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <pthread.h>
 
-#define FONT_SZ 14.0f
+#define FONT_SZ 28.0f // max size
+#define FONT_SCALE 2 // default font is FONT_SZ/FONT_SCALE
 
 #include "imgui/imgui.h"
 #include "backend/imgui_impl_glfw.h"
@@ -36,127 +39,77 @@ static void glfw_error_callback(int error, const char *description)
 
 cpu_6502 *cpu; // our cpu!
 
-bool cpu_running = false;
+volatile bool cpu_running = false;
+volatile bool cpu_stepping = true;
+volatile unsigned long long cpu_time = 17000; // 17000 us
+
+volatile int done = 0;
 
 static ImFont *HexWinFont;
 
-void CodeEditor()
-{
-    ImGui::Begin("RAM Viewer and Editor");
-    static int baddr = 0x0;
-    static int rc[] = {16, 16};
-    float win_sz_x = (6 + rc[1] * 2) * FONT_SZ;
-    float win_sz_y = (4 + rc[0]) * (FONT_SZ + 6);
-    if (win_sz_x < (6 + 3 * 2) * FONT_SZ)
-        win_sz_x = (6 + 3 * 2) * FONT_SZ;
-    ImGui::SetWindowSize(ImVec2(win_sz_x, win_sz_y));
-    char buf[3];
-    ImGui::Text("Rows: ");
-    ImGui::SameLine();
-    snprintf(buf, sizeof(buf), "%d", rc[0]);
-    ImGui::PushItemWidth(2 * FONT_SZ);
-    if (ImGui::InputText("##Row", buf, IM_ARRAYSIZE(buf), ImGuiInputTextFlags_EnterReturnsTrue))
-    {
-        int tmp = strtol(buf, NULL, 10);
-        if (tmp > 0 && tmp < 31)
-            rc[0] = tmp;
-    }
-    ImGui::PopItemWidth();
-    ImGui::SameLine();
-    ImGui::Text("Cols: ");
-    ImGui::SameLine();
-    snprintf(buf, sizeof(buf), "%d", rc[1]);
-    ImGui::PushItemWidth(2 * FONT_SZ);
-    if (ImGui::InputText("##Col", buf, IM_ARRAYSIZE(buf), ImGuiInputTextFlags_EnterReturnsTrue))
-    {
-        int tmp = strtol(buf, NULL, 10);
-        if (tmp > 0 && tmp < 17)
-        {
-            rc[1] = tmp;
-        }
-    }
-    ImGui::Columns(rc[1] + 1, "Offsets", false);
-    ImGui::SetColumnWidth(0, 4 * FONT_SZ);
-    for (int i = 1; i < rc[1] + 1; i++)
-        ImGui::SetColumnWidth(i, 2 * FONT_SZ);
+bool show_mem_editor = true;
+bool show_gui_settings = false;
+bool show_help_window = true;
 
-    for (int i = -1; i < rc[0]; i++)
-    {
-        if (i < 0) // print header
-        {
-            ImGui::Text("Base");
-            ImGui::NextColumn();
-            for (int j = 0; j < rc[1]; j++)
-            {
-                ImGui::Text("%02X", j);
-                ImGui::NextColumn();
-            }
-            ImGui::PushFont(HexWinFont);
-            ImGui::Separator();
-            continue;
-        }
-        for (int j = -1; j < rc[1]; j++)
-        {
-            if (j < 0) // address
-            {
-                if (i == 0) // selectable base address
-                {
-                    char tmp[10];
-                    snprintf(tmp, sizeof(tmp), "0x%04X", baddr);
-                    if (ImGui::SelectableInput("baddr", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
-                    {
-                        unsigned short num = strtol(tmp, NULL, 16);
-                        if (num + rc[0] * rc[1] > (int) MAX_MEM_SZ)
-                            num = MAX_MEM_SZ - rc[0] * rc[1];
-                        baddr = num;
-                    }
-                    ImGui::NextColumn();
-                }
-                else
-                {
-                    ImGui::Text("0x%04X", baddr + rc[1] * i);
-                    ImGui::NextColumn();
-                }
-            }
-            else
-            {
-                char label[32];
-                snprintf(label, 32, "mem_%d_%d", i, j);
-                char tmp[10];
-                int local_mem_idx = baddr + rc[1] * i + j;
-                snprintf(tmp, sizeof(tmp), "%02X", cpu->mem[local_mem_idx]);
-                if (!cpu_running)
-                {
-                    if (ImGui::SelectableInput(label, false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
-                    {
-                        unsigned short num = strtol(tmp, NULL, 16);
-                        if (num > 0xff)
-                            num = 0;
-                        cpu->mem[local_mem_idx] = num;
-                    }
-                }
-                else
-                {
-                    ImGui::Selectable(tmp, false);
-                }
-                ImGui::NextColumn();
-            }
-        }
-    }
-    ImGui::Columns(1);
-    ImGui::PopFont();
-    ImGui::End();
-}
+void CPURun();
+void *CPUThread(void *);
+void CodeEditor(bool *active);
+void CPURegisters(float);
+void GUISettings(bool *active);
+void HelpWindow(bool *active);
+
+#define DEFAULT_RST 0x8000
+#define DEFAULT_NMI 0x0200
+#define DEFAULT_IRQ 0x0300
+
+ImVec4 clear_color = ImVec4(0, 0, 0, 1.00f);
 
 int main(int, char **)
 {
     // malloc CPU
     cpu = (cpu_6502 *)malloc(sizeof(cpu_6502));
+    if (cpu == NULL)
+    {
+        perror("main: malloc: ");
+        exit(-1);
+    }
+    // set vectors
+    static word RESET_VEC = DEFAULT_RST; // default reset location
+    static word NMI_VEC = DEFAULT_NMI;   // default NMI handler
+    static word IRQ_VEC = DEFAULT_IRQ;   // default IRQ/BRK handler
+    // update vectors
+    cpu->mem[V_RESET] = RESET_VEC;
+    cpu->mem[V_RESET + 1] = RESET_VEC >> 8;
+    cpu->mem[V_NMI] = NMI_VEC;
+    cpu->mem[V_NMI + 1] = NMI_VEC >> 8;
+    cpu->mem[V_IRQ_BRK] = IRQ_VEC;
+    cpu->mem[V_IRQ_BRK + 1] = IRQ_VEC >> 8;
+    // fill out demo program
+    cpu->mem[0x8000] = NOP;
+    cpu->mem[0x8001] = JMP_INDIRECT;
+    cpu->mem[0x8002] = 0x00;
+    cpu->mem[0x8003] = 0x90;
+    cpu->mem[0x9000] = 0x00;
+    cpu->mem[0x9001] = 0xa0;
+    cpu->mem[0xa000] = ADC_IMM;
+    cpu->mem[0xa001] = 0x09;
+    cpu->mem[0xa002] = ADC_IMM;
+    cpu->mem[0xa003] = 0x05;
+    cpu->mem[0xa004] = JMP_IMM;
+    cpu->mem[0xa005] = 0x00;
+    cpu->mem[0xa006] = 0x80;
+    // set up CPU thread
+    pthread_t cpu_thread;
+    if (pthread_create(&cpu_thread, NULL, &CPUThread, NULL) < 0)
+    {
+        perror("main: Could not set up CPU thread: ");
+        exit(-2);
+    }
     // Setup window
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
         return 1;
-    GLFWwindow *window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+OpenGL2 example", NULL, NULL);
+    GLFWwindow *window = glfwCreateWindow(1280, 720, "MOS6502 Assembly Programmer", NULL, NULL);
     if (window == NULL)
         return 1;
     glfwMakeContextCurrent(window);
@@ -206,11 +159,6 @@ int main(int, char **)
     //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
     //IM_ASSERT(font != NULL);
 
-    // Our state
-    bool show_demo_window = true;
-    bool show_another_window = false;
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
@@ -227,43 +175,28 @@ int main(int, char **)
         ImGui::NewFrame();
 
         // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-        if (show_demo_window)
-            ImGui::ShowDemoWindow(&show_demo_window);
+        // if (show_cpu_internals)
+        //     ImGui::CPURegisterWindow(&show_cpu_internals);
 
         // 2. Show a simple window that we create ourselves. We use a Begin/End pair to created a named window.
+
+        // 3. Show another simple12window.
+        if (show_mem_editor)
         {
-            static float f = 0.0f;
-            static int counter = 0;
-
-            ImGui::Begin("Hello, world!"); // Create a window called "Hello, world!" and append into it.
-
-            ImGui::Text("This is some useful text.");          // Display some text (you can use a format strings too)
-            ImGui::Checkbox("Demo Window", &show_demo_window); // Edit bools storing our window open/close state
-            ImGui::Checkbox("Another Window", &show_another_window);
-
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);             // Edit 1 float using a slider from 0.0f to 1.0f
-            ImGui::ColorEdit3("clear color", (float *)&clear_color); // Edit 3 floats representing a color
-
-            if (ImGui::Button("Button")) // Buttons return true when clicked (most widgets return true when edited/activated)
-                counter++;
-            ImGui::SameLine();
-            ImGui::Text("counter = %d", counter);
-
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-            ImGui::End();
+            CodeEditor(&show_mem_editor);
         }
 
-        // 3. Show another simple window.
-        if (show_another_window)
+        if (show_gui_settings)
         {
-            ImGui::Begin("Another Window", &show_another_window); // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-            ImGui::Text("Hello from another window!");
-            if (ImGui::Button("Close Me"))
-                show_another_window = false;
-            ImGui::End();
+            GUISettings(&show_gui_settings);
         }
 
-        CodeEditor();
+        if (show_help_window)
+        {
+            HelpWindow(&show_help_window);
+        }
+
+        CPURun();
 
         // Rendering
         ImGui::Render();
@@ -303,6 +236,383 @@ int main(int, char **)
     glfwDestroyWindow(window);
     glfwTerminate();
 
+    done = 1;
+    pthread_join(cpu_thread, NULL);
     free(cpu);
     return 0;
+}
+
+void CPURun()
+{
+    static word RESET_VEC = DEFAULT_RST; // default reset location
+    static word NMI_VEC = DEFAULT_NMI;   // default NMI handler
+    static word IRQ_VEC = DEFAULT_IRQ;   // default IRQ/BRK handler
+
+    ImGui::Begin("MOS6502");
+    static float font_scale = 1.0f/FONT_SCALE;
+    ImGui::SetWindowFontScale(font_scale);
+    float win_sz_x = (5 + 8 * 2) * font_scale * FONT_SZ;
+    float win_sz_y = 18 * font_scale * (FONT_SZ + 6 / font_scale);
+    ImGui::SetWindowSize(ImVec2(win_sz_x, win_sz_y));
+    static char cpustatus[128];
+    snprintf(cpustatus, sizeof(cpustatus), "Status: %s", cpu_stepping ? "Stepping" : (cpu_running ? "Running" : "Paused"));
+    ImGui::Text(cpustatus);
+    ImGui::SameLine();
+    char tmp[25];
+    ImGui::Text("Instruction Time: ");
+    ImGui::SameLine();
+    snprintf(tmp, sizeof(tmp), "%llu ms", cpu_time / 1000);
+    if (ImGui::SelectableInput("cputime", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
+    {
+        unsigned long long num = strtoll(tmp, NULL, 10);
+        if (num > 10 * 60 * 1000)
+            num = 1 * 1000; // 1 second
+        if (num == 0)
+            num = 17;
+        cpu_time = num * 1000;
+    }
+    ImGui::Separator();
+    CPURegisters(font_scale);
+    if (ImGui::Button("Reset CPU"))
+    {
+        cpu_running = false;
+        cpu_stepping = true;
+        cpu_reset(cpu);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Clear Memory"))
+    {
+        cpu_running = false;
+        cpu_stepping = false;
+        for (unsigned i = 0; i < MAX_MEM_SZ; i++)
+            cpu->mem[i] = 0;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Load Default"))
+    {
+        cpu_running = false;
+        cpu_stepping = true;
+        RESET_VEC = 0x8000; // default reset location
+        NMI_VEC = 0x0200;   // default NMI handler
+        IRQ_VEC = 0x0300;   // default IRQ/BRK handler
+        cpu->mem[V_RESET] = RESET_VEC;
+        cpu->mem[V_RESET + 1] = RESET_VEC >> 8;
+        cpu->mem[V_NMI] = NMI_VEC;
+        cpu->mem[V_NMI + 1] = NMI_VEC >> 8;
+        cpu->mem[V_IRQ_BRK] = IRQ_VEC;
+        cpu->mem[V_IRQ_BRK + 1] = IRQ_VEC >> 8;
+
+        cpu->mem[0x8000] = NOP;
+        cpu->mem[0x8001] = JMP_INDIRECT;
+        cpu->mem[0x8002] = 0x00;
+        cpu->mem[0x8003] = 0x90;
+        cpu->mem[0x9000] = 0x00;
+        cpu->mem[0x9001] = 0xa0;
+        cpu->mem[0xa000] = ADC_IMM;
+        cpu->mem[0xa001] = 0x09;
+        cpu->mem[0xa002] = ADC_IMM;
+        cpu->mem[0xa003] = 0x05;
+        cpu->mem[0xa004] = JMP_IMM;
+        cpu->mem[0xa005] = 0x00;
+        cpu->mem[0xa006] = 0x80;
+    }
+    if (ImGui::Button("Start"))
+    {
+        if (!cpu_running)
+        {
+            cpu_stepping = false;
+            cpu_running = true;
+        }
+        else
+        {
+            cpu_stepping = true;
+            cpu_running = false;
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Pause"))
+    {
+        cpu_running = false;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Step"))
+    {
+        cpu_stepping = true;
+        cpu_running = true;
+    }
+    ImGui::Separator();
+    ImGui::Columns(2, "vector_inputs", false);
+    ImGui::Text("Reset Vector: ");
+    ImGui::NextColumn();
+    snprintf(tmp, sizeof(tmp), "0x%04X", RESET_VEC);
+    if (ImGui::SelectableInput("resetvec", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
+    {
+        word num = strtoll(tmp, NULL, 16);
+        if (num > MAX_MEM_SZ - 1)
+            num = 0x8000; // 1 second
+        if (num == 0)
+            num = 0x400;
+        RESET_VEC = num;
+    }
+    ImGui::NextColumn();
+    ImGui::Text("NMI Vector: ");
+    ImGui::NextColumn();
+    snprintf(tmp, sizeof(tmp), "0x%04X", NMI_VEC);
+    if (ImGui::SelectableInput("nmivec", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
+    {
+        word num = strtoll(tmp, NULL, 16);
+        if (num > MAX_MEM_SZ - 1)
+            num = 0x200; // 1 second
+        if (num == 0)
+            num = 0x200;
+        NMI_VEC = num;
+    }
+    ImGui::NextColumn();
+    ImGui::Text("IRQ Vector: ");
+    ImGui::NextColumn();
+    snprintf(tmp, sizeof(tmp), "0x%04X", IRQ_VEC);
+    if (ImGui::SelectableInput("irqvec", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
+    {
+        word num = strtoll(tmp, NULL, 16);
+        if (num > MAX_MEM_SZ - 1)
+            num = 0x300; // 1 second
+        if (num == 0)
+            num = 0x300;
+        NMI_VEC = num;
+    }
+    ImGui::Columns(1);
+    ImGui::Separator();
+    ImGui::Checkbox("Show Memory Editor", &show_mem_editor);
+    ImGui::Checkbox("Show Help Info", &show_help_window);
+    ImGui::Checkbox("Show GUI Info", &show_gui_settings);
+    ImGui::End();
+}
+
+void *CPUThread(void *id)
+{
+    while (!done)
+    {
+        if (cpu_running)
+        {
+            cpu_exec(cpu);
+            if (cpu_stepping)
+                cpu_running = false;
+        }
+        usleep(cpu_time); // 60 Hz
+    }
+    return NULL;
+}
+
+void CPURegisters(float font_scale)
+{
+    ImGui::Text("A: ");
+    ImGui::SameLine();
+    ImGui::PushFont(HexWinFont);
+    ImGui::Text("0x%02X", cpu->a);
+    ImGui::PopFont();
+    ImGui::Text("X: ");
+    ImGui::SameLine();
+    ImGui::PushFont(HexWinFont);
+    ImGui::Text("0x%02X", cpu->x);
+    ImGui::PopFont();
+    ImGui::SameLine();
+    ImGui::Text("\t");
+    ImGui::SameLine();
+    ImGui::Text("Y: ");
+    ImGui::SameLine();
+    ImGui::PushFont(HexWinFont);
+    ImGui::Text("0x%02X", cpu->y);
+    ImGui::PopFont();
+    ImGui::Separator();
+    ImGui::Text("PC: ");
+    ImGui::SameLine();
+    ImGui::PushFont(HexWinFont);
+    ImGui::Text("0x%04X", cpu->pc);
+    ImGui::PopFont();
+    ImGui::SameLine();
+    ImGui::Text("\t");
+    ImGui::SameLine();
+    ImGui::Text("SP: ");
+    ImGui::SameLine();
+    ImGui::PushFont(HexWinFont);
+    ImGui::Text("0x01%02X", cpu->sp);
+    ImGui::PopFont();
+    ImGui::Separator();
+    ImGui::Columns(9);
+    ImGui::SetColumnWidth(0, 4 * font_scale * FONT_SZ);
+    for (int i = 1; i < 9; i++)
+        ImGui::SetColumnWidth(i, 2 * font_scale * FONT_SZ);
+    ImGui::Text("Flag");
+    ImGui::NextColumn();
+    ImGui::PushFont(HexWinFont);
+    ImGui::Text("N");
+    ImGui::NextColumn();
+    ImGui::Text("V");
+    ImGui::NextColumn();
+    ImGui::Text("-");
+    ImGui::NextColumn();
+    ImGui::Text("B");
+    ImGui::NextColumn();
+    ImGui::Text("D");
+    ImGui::NextColumn();
+    ImGui::Text("I");
+    ImGui::NextColumn();
+    ImGui::Text("Z");
+    ImGui::NextColumn();
+    ImGui::Text("C");
+    ImGui::NextColumn();
+    ImGui::PopFont();
+    ImGui::Text("Value");
+    ImGui::NextColumn();
+    ImGui::PushFont(HexWinFont);
+    ImGui::Text("%01X", cpu->n);
+    ImGui::NextColumn();
+    ImGui::Text("%01X", cpu->v);
+    ImGui::NextColumn();
+    ImGui::Text("-");
+    ImGui::NextColumn();
+    ImGui::Text("%01X", cpu->b);
+    ImGui::NextColumn();
+    ImGui::Text("%01X", cpu->d);
+    ImGui::NextColumn();
+    ImGui::Text("%01X", cpu->i);
+    ImGui::NextColumn();
+    ImGui::Text("%01X", cpu->z);
+    ImGui::NextColumn();
+    ImGui::Text("%01X", cpu->c);
+    ImGui::NextColumn();
+    ImGui::PopFont();
+    ImGui::Columns(1);
+}
+
+void CodeEditor(bool *active)
+{
+    ImGui::Begin("RAM Viewer and Editor", active);
+    static float font_scale = 1.0f/FONT_SCALE;
+    ImGui::SetWindowFontScale(font_scale);
+    static int baddr = 0x8000;
+    static int rc[] = {16, 16};
+    float win_sz_x = (6 + rc[1] * 2) * font_scale * FONT_SZ;
+    float win_sz_y = (4 + rc[0]) * font_scale * (FONT_SZ + 6);
+    if (win_sz_x < (6 + 3 * 2) * font_scale * FONT_SZ)
+        win_sz_x = (6 + 3 * 2) * font_scale * FONT_SZ;
+    ImGui::SetWindowSize(ImVec2(win_sz_x, win_sz_y));
+    char buf[3];
+    ImGui::Text("Rows: ");
+    ImGui::SameLine();
+    snprintf(buf, sizeof(buf), "%d", rc[0]);
+    ImGui::PushItemWidth(2 * font_scale * FONT_SZ);
+    if (ImGui::InputText("##Row", buf, IM_ARRAYSIZE(buf), ImGuiInputTextFlags_EnterReturnsTrue))
+    {
+        int tmp = strtol(buf, NULL, 10);
+        if (tmp > 0 && tmp < 31)
+            rc[0] = tmp;
+    }
+    ImGui::PopItemWidth();
+    ImGui::SameLine();
+    ImGui::Text("Cols: ");
+    ImGui::SameLine();
+    snprintf(buf, sizeof(buf), "%d", rc[1]);
+    ImGui::PushItemWidth(2 * font_scale * FONT_SZ);
+    if (ImGui::InputText("##Col", buf, IM_ARRAYSIZE(buf), ImGuiInputTextFlags_EnterReturnsTrue))
+    {
+        int tmp = strtol(buf, NULL, 10);
+        if (tmp > 0 && tmp < 17)
+        {
+            rc[1] = tmp;
+        }
+    }
+    ImGui::Columns(rc[1] + 1, "Offsets", false);
+    ImGui::SetColumnWidth(0, 4 * font_scale * FONT_SZ);
+    for (int i = 1; i < rc[1] + 1; i++)
+        ImGui::SetColumnWidth(i, 2 * font_scale * FONT_SZ);
+
+    for (int i = -1; i < rc[0]; i++)
+    {
+        if (i < 0) // print header
+        {
+            ImGui::Text("Base");
+            ImGui::NextColumn();
+            for (int j = 0; j < rc[1]; j++)
+            {
+                ImGui::Text("%02X", j);
+                ImGui::NextColumn();
+            }
+            ImGui::PushFont(HexWinFont);
+            ImGui::Separator();
+            continue;
+        }
+        for (int j = -1; j < rc[1]; j++)
+        {
+            if (j < 0) // address
+            {
+                if (i == 0) // selectable base address
+                {
+                    char tmp[10];
+                    snprintf(tmp, sizeof(tmp), "0x%04X", baddr);
+                    if (ImGui::SelectableInput("baddr", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
+                    {
+                        unsigned short num = strtol(tmp, NULL, 16);
+                        if (num + rc[0] * rc[1] > (int)MAX_MEM_SZ)
+                            num = MAX_MEM_SZ - rc[0] * rc[1];
+                        baddr = num;
+                    }
+                    ImGui::NextColumn();
+                }
+                else
+                {
+                    ImGui::Text("0x%04X", baddr + rc[1] * i);
+                    ImGui::NextColumn();
+                }
+            }
+            else
+            {
+                char label[32];
+                snprintf(label, 32, "mem_%d_%d", i, j);
+                char tmp[10];
+                int local_mem_idx = baddr + rc[1] * i + j;
+                snprintf(tmp, sizeof(tmp), "%02X", cpu->mem[local_mem_idx]);
+                if (!cpu_running)
+                {
+                    if (ImGui::SelectableInput(label, false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
+                    {
+                        unsigned short num = strtol(tmp, NULL, 16);
+                        if (num > 0xff)
+                            num = 0;
+                        cpu->mem[local_mem_idx] = num;
+                    }
+                }
+                else
+                {
+                    ImGui::Selectable(tmp, false);
+                }
+                ImGui::NextColumn();
+            }
+        }
+    }
+    ImGui::Columns(1);
+    ImGui::PopFont();
+    ImGui::End();
+}
+
+void GUISettings(bool *active)
+{
+    ImGui::Begin("GUI Settings", active);
+    static float font_scale = 1.0f/FONT_SCALE;
+    ImGui::SetWindowFontScale(font_scale);                                // Create a window called "Hello, world!" and append into it.
+    ImGui::ColorEdit3("Change Background Color", (float *)&clear_color); // Edit 3 floats representing a color
+    ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+    ImGui::End();
+}
+
+void HelpWindow(bool *active)
+{
+    ImGui::Begin("Information", active);
+    static float font_scale = 1.0f/FONT_SCALE;
+    ImGui::SetWindowFontScale(font_scale);
+    ImGui::SetWindowSize(ImVec2(80 * font_scale * FONT_SZ, 24 * font_scale * FONT_SZ));
+    ImGui::Text("MOS6502 Emulator");
+    ImGui::Separator();
+    ImGui::Text("Reset CPU: Load current value of reset vector (default: 0x8000) to program counter (PC), clear all registers, and set the CPU into stepping mode.");
+    ImGui::End();
 }

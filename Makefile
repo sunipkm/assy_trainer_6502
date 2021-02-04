@@ -6,7 +6,7 @@ PWD=$(shell pwd)
 CDR=$(shell pwd)
 ECHO=echo
 
-EDCFLAGS:=$(CFLAGS) -I include/ -Wall -fpermissive -std=c11
+EDCFLAGS:=$(CFLAGS) -I include/ -I mos6502/ -Wall -std=gnu11
 EDLDFLAGS:=$(LDFLAGS) -lpthread -lm
 EDDEBUG:=$(DEBUG)
 
@@ -16,7 +16,7 @@ endif
 
 UNAME_S := $(shell uname -s)
 
-CXXFLAGS:= -I include/ -I imgui/include -I imgui/include/imgui -I imgui/include/backend -I ./ -Wall -O2 -fpermissive -std=gnu++11
+CXXFLAGS:= -I include/ -I imgui/include -I mos6502/ -Wall -O2 -fpermissive -std=gnu++11
 LIBS = -lpthread
 
 ifeq ($(UNAME_S), Linux) #LINUX
@@ -45,13 +45,15 @@ all: CFLAGS+= -O2
 
 GUITARGET=client.out
 
+COBJS=mos6502/c_6502.o
+
 CPPOBJS=main.o
 
 all: $(GUITARGET) imgui/libimgui_glfw.a
 	$(ECHO) "Built for $(UNAME_S), execute ./$(GUITARGET)"
 
-$(GUITARGET): $(CPPOBJS) imgui/libimgui_glfw.a
-	$(CXX) $(CXXFLAGS) -o $@ $(CPPOBJS) imgui/libimgui_glfw.a $(LIBS)
+$(GUITARGET): $(CPPOBJS) $(COBJS) imgui/libimgui_glfw.a
+	$(CXX) $(CXXFLAGS) -o $@ $(CPPOBJS) $(COBJS) imgui/libimgui_glfw.a $(LIBS)
 
 imgui/libimgui_glfw.a:
 	cd $(PWD)/imgui && make -j$(nproc) && cd $(PWD)
@@ -67,6 +69,7 @@ imgui/libimgui_glfw.a:
 clean:
 	$(RM) $(GUITARGET)
 	$(RM) $(CPPOBJS)
+	$(RM) $(COBJS)
 
 spotless: clean
 	cd $(PWD)/imgui && make spotless && cd $(PWD)
