@@ -92,18 +92,20 @@ int main(int, char **)
     cpu->mem[V_IRQ_BRK] = IRQ_VEC;
     cpu->mem[V_IRQ_BRK + 1] = IRQ_VEC >> 8;
     // fill out demo program
-    cpu->mem[0x8000] = NOP;
-    cpu->mem[0x8001] = JMP_INDIRECT;
-    cpu->mem[0x8002] = 0x00;
-    cpu->mem[0x8003] = 0x90;
+    cpu->mem[0x8000] = LDA_IMM;
+    cpu->mem[0x8001] = 0x0;
+    cpu->mem[0x8002] = NOP;
+    cpu->mem[0x8003] = JMP_IND;
+    cpu->mem[0x8004] = 0x00;
+    cpu->mem[0x8005] = 0x90;
     cpu->mem[0x9000] = 0x00;
     cpu->mem[0x9001] = 0xa0;
     cpu->mem[0xa000] = ADC_IMM;
     cpu->mem[0xa001] = 0x09;
     cpu->mem[0xa002] = ADC_IMM;
     cpu->mem[0xa003] = 0x05;
-    cpu->mem[0xa004] = JMP_IMM;
-    cpu->mem[0xa005] = 0x00;
+    cpu->mem[0xa004] = JMP_ABS;
+    cpu->mem[0xa005] = 0x02;
     cpu->mem[0xa006] = 0x80;
     // set up CPU thread
     pthread_t cpu_thread;
@@ -260,11 +262,11 @@ void CPURun()
     static float usr_font_scale = 1.0f;
     ImGui::SetWindowFontScale(font_scale * usr_font_scale);
     float win_sz_x = (5 + 8 * 2) * font_scale * usr_font_scale * FONT_SZ;
-    float win_sz_y = 19 * font_scale * usr_font_scale * (FONT_SZ + 6 / font_scale / usr_font_scale);
+    float win_sz_y = 21 * font_scale * usr_font_scale * (FONT_SZ + 6 / font_scale / usr_font_scale);
     ImGui::SetWindowSize(ImVec2(win_sz_x, win_sz_y));
     float __usr_font_scale = usr_font_scale;
     // ImGui::PushItemWidth(15 * font_scale * usr_font_scale * FONT_SZ);
-    if(ImGui::InputFloat("Text Size", &__usr_font_scale, 0.1, 0.5, "%.1f"))
+    if (ImGui::InputFloat("Text Size", &__usr_font_scale, 0.1, 0.5, "%.1f"))
     {
         if (__usr_font_scale < 0.5)
             __usr_font_scale = 0.5;
@@ -321,18 +323,20 @@ void CPURun()
         cpu->mem[V_IRQ_BRK] = IRQ_VEC;
         cpu->mem[V_IRQ_BRK + 1] = IRQ_VEC >> 8;
 
-        cpu->mem[0x8000] = NOP;
-        cpu->mem[0x8001] = JMP_INDIRECT;
-        cpu->mem[0x8002] = 0x00;
-        cpu->mem[0x8003] = 0x90;
+        cpu->mem[0x8000] = LDA_IMM;
+        cpu->mem[0x8001] = 0x0;
+        cpu->mem[0x8002] = NOP;
+        cpu->mem[0x8003] = JMP_IND;
+        cpu->mem[0x8004] = 0x00;
+        cpu->mem[0x8005] = 0x90;
         cpu->mem[0x9000] = 0x00;
         cpu->mem[0x9001] = 0xa0;
         cpu->mem[0xa000] = ADC_IMM;
         cpu->mem[0xa001] = 0x09;
         cpu->mem[0xa002] = ADC_IMM;
         cpu->mem[0xa003] = 0x05;
-        cpu->mem[0xa004] = JMP_IMM;
-        cpu->mem[0xa005] = 0x00;
+        cpu->mem[0xa004] = JMP_ABS;
+        cpu->mem[0xa005] = 0x02;
         cpu->mem[0xa006] = 0x80;
     }
     if (ImGui::Button("Start"))
@@ -438,6 +442,17 @@ void CPURegisters(float font_scale)
     ImGui::PushFont(HexWinFont);
     ImGui::Text("0x%02X", cpu->a);
     ImGui::PopFont();
+
+    ImGui::SameLine();
+    ImGui::Text("\t");
+    ImGui::SameLine();
+    
+    ImGui::Text("Cycle: ");
+    ImGui::SameLine();
+    ImGui::PushFont(HexWinFont);
+    ImGui::Text("%s", CYCLE_NAME_6502[cpu->cycle]);
+    ImGui::PopFont();
+
     ImGui::Text("X: ");
     ImGui::SameLine();
     ImGui::PushFont(HexWinFont);
@@ -511,6 +526,7 @@ void CPURegisters(float font_scale)
     ImGui::NextColumn();
     ImGui::PopFont();
     ImGui::Columns(1);
+    ImGui::Separator();
 }
 
 void CodeEditor(bool *active)
@@ -528,7 +544,7 @@ void CodeEditor(bool *active)
     ImGui::SetWindowSize(ImVec2(win_sz_x, win_sz_y));
     float __usr_font_scale = usr_font_scale;
     // ImGui::PushItemWidth(15 * font_scale * usr_font_scale * FONT_SZ);
-    if(ImGui::InputFloat("Text Size", &__usr_font_scale, 0.1, 0.5, "%.1f"))
+    if (ImGui::InputFloat("Text Size", &__usr_font_scale, 0.1, 0.5, "%.1f"))
     {
         if (__usr_font_scale < 0.5)
             __usr_font_scale = 0.5;
@@ -581,6 +597,7 @@ void CodeEditor(bool *active)
         for (int j = -1; j < rc[1]; j++)
         {
             word pcaddr = cpu_running ? cpu->pc : 0x0;
+            word instraddr = cpu_running ? cpu->instr_ptr : 0x0;
             if (j < 0) // address
             {
                 if (i == 0) // selectable base address
@@ -641,6 +658,11 @@ void CodeEditor(bool *active)
                 if (local_mem_idx == pcaddr)
                 {
                     ImGui::PushStyleColor(0, IMGRN);
+                    colorpushed = true;
+                }
+                else if (local_mem_idx == instraddr)
+                {
+                    ImGui::PushStyleColor(0, IMYLW);
                     colorpushed = true;
                 }
                 if (!cpu_running)
