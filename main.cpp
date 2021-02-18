@@ -729,8 +729,7 @@ void CodeEditor(bool *active)
                 }
                 else
                 {
-                    ImGui::Text("%s", tmp);
-                    // ImGui::SelectableInput(label, false, ImGuiSelectableFlags_Disabled, tmp, IM_ARRAYSIZE(tmp));
+                    ImGui::SelectableInput(label, false, ImGuiSelectableFlags_Disabled, tmp, IM_ARRAYSIZE(tmp));
                 }
                 if (colorpushed)
                     ImGui::PopStyleColor();
