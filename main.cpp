@@ -366,6 +366,43 @@ void CPURun()
         cpu_stepping = true;
         cpu_running = true;
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Load Test"))
+    {
+        cpu_stepping = true;
+        cpu_running = false;
+        FILE *fp = fopen("test/6502_functional_test.bin", "rb");
+        if (fp != NULL)
+        {
+            // calculate size
+            fseek(fp, 0, SEEK_END);
+            ssize_t sz = ftell(fp);
+            fseek(fp, 0, SEEK_SET);
+
+            if (sz != 0x10000)
+            {
+                printf("Binary file size: %ld bytes, which is not equal to %d bytes\n", sz, 0x10000);
+            }
+            else
+            {
+                ssize_t rdsz = fread(cpu->mem, 1, sz, fp);
+                if (rdsz == sz)
+                {
+                    printf("Binary ROM read OK, setting RESET vector to 0x400\n");
+                    RESET_VEC = 0x400;
+                    NMI_VEC = cpu->mem[V_NMI];
+                    NMI_VEC |= ((word)cpu->mem[V_NMI + 1]) << 8;
+                    IRQ_VEC = cpu->mem[V_IRQ_BRK];
+                    IRQ_VEC |= ((word)cpu->mem[V_IRQ_BRK + 1]) << 8;
+                }
+                else
+                {
+                    printf("Binary ROM read FAILED, read %ld bytes out of %ld bytes\n", rdsz, sz);
+                }
+            }
+            fclose(fp);
+        }
+    }
     ImGui::Separator();
     ImGui::Columns(2, "vector_inputs", false);
     ImGui::Text("Reset Vector: ");
@@ -380,6 +417,8 @@ void CPURun()
         if (num == 0)
             num = 0x400;
         RESET_VEC = num;
+        cpu->mem[V_RESET] = RESET_VEC;
+        cpu->mem[V_RESET + 1] = RESET_VEC >> 8;
     }
     ImGui::PopStyleColor();
     ImGui::NextColumn();
@@ -395,6 +434,8 @@ void CPURun()
         if (num == 0)
             num = 0x200;
         NMI_VEC = num;
+        cpu->mem[V_NMI] = NMI_VEC;
+        cpu->mem[V_NMI + 1] = NMI_VEC >> 8;
     }
     ImGui::PopStyleColor();
     ImGui::NextColumn();
@@ -409,7 +450,9 @@ void CPURun()
             num = 0x300; // 1 second
         if (num == 0)
             num = 0x300;
-        NMI_VEC = num;
+        IRQ_VEC = num;
+        cpu->mem[V_IRQ_BRK] = IRQ_VEC;
+        cpu->mem[V_IRQ_BRK + 1] = IRQ_VEC >> 8;
     }
     ImGui::PopStyleColor();
     ImGui::Columns(1);
@@ -602,8 +645,8 @@ void CodeEditor(bool *active)
         }
         for (int j = -1; j < rc[1]; j++)
         {
-            word pcaddr = cpu_running ? cpu->pc : 0x0;
-            word instraddr = cpu_running ? cpu->instr_ptr : 0x0;
+            word pcaddr = cpu->pc; // : 0x0;
+            word instraddr = cpu->instr_ptr; // : 0x0;
             if (j < 0) // address
             {
                 if (i == 0) // selectable base address
@@ -683,7 +726,8 @@ void CodeEditor(bool *active)
                 }
                 else
                 {
-                    ImGui::SelectableInput(label, false, ImGuiSelectableFlags_Disabled, tmp, IM_ARRAYSIZE(tmp));
+                    ImGui::Text("%s", tmp);
+                    // ImGui::SelectableInput(label, false, ImGuiSelectableFlags_Disabled, tmp, IM_ARRAYSIZE(tmp));
                 }
                 if (colorpushed)
                     ImGui::PopStyleColor();
