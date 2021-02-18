@@ -434,7 +434,9 @@ void *CPUThread(void *id)
                 cpu_running = false;
             total_cycles++;
         }
-        usleep(cpu_time); // 60 Hz
+        usleep(cpu_time / 2); // 60 Hz
+        // other devices can read from memory here
+        usleep(cpu_time / 2);
     }
     return NULL;
 }
