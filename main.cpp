@@ -49,6 +49,7 @@ cpu_6502 *cpu; // our cpu!
 volatile bool cpu_running = false;
 volatile bool cpu_stepping = true;
 volatile unsigned long long cpu_time = 17000; // 17000 us
+uint64_t total_cycles = 0;
 
 volatile int done = 0;
 
@@ -262,7 +263,7 @@ void CPURun()
     static float usr_font_scale = 1.0f;
     ImGui::SetWindowFontScale(font_scale * usr_font_scale);
     float win_sz_x = (5 + 8 * 2) * font_scale * usr_font_scale * FONT_SZ;
-    float win_sz_y = 21 * font_scale * usr_font_scale * (FONT_SZ + 6 / font_scale / usr_font_scale);
+    float win_sz_y = 22 * font_scale * usr_font_scale * (FONT_SZ + 6 / font_scale / usr_font_scale);
     ImGui::SetWindowSize(ImVec2(win_sz_x, win_sz_y));
     float __usr_font_scale = usr_font_scale;
     // ImGui::PushItemWidth(15 * font_scale * usr_font_scale * FONT_SZ);
@@ -290,6 +291,7 @@ void CPURun()
         cpu_time = num * 1000;
     }
     ImGui::PopStyleColor();
+    ImGui::Text("Total Cycles: %llu", total_cycles);
     ImGui::PushStyleColor(0, IMYLW);
     ImGui::Separator();
     ImGui::PopStyleColor();
@@ -298,6 +300,7 @@ void CPURun()
     {
         cpu_running = false;
         cpu_stepping = true;
+        total_cycles = 0;
         cpu_reset(cpu);
     }
     ImGui::SameLine();
@@ -429,6 +432,7 @@ void *CPUThread(void *id)
             cpu_exec(cpu);
             if (cpu_stepping)
                 cpu_running = false;
+            total_cycles++;
         }
         usleep(cpu_time); // 60 Hz
     }
@@ -446,7 +450,7 @@ void CPURegisters(float font_scale)
     ImGui::SameLine();
     ImGui::Text("\t");
     ImGui::SameLine();
-    
+
     ImGui::Text("Cycle: ");
     ImGui::SameLine();
     ImGui::PushFont(HexWinFont);
