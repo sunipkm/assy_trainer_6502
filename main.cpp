@@ -390,10 +390,13 @@ void CPURun()
                 {
                     printf("Binary ROM read OK, setting RESET vector to 0x400\n");
                     RESET_VEC = 0x400;
+                    cpu->mem[V_RESET] = RESET_VEC;
+                    cpu->mem[V_RESET + 1] = RESET_VEC >> 8;
                     NMI_VEC = cpu->mem[V_NMI];
                     NMI_VEC |= ((word)cpu->mem[V_NMI + 1]) << 8;
                     IRQ_VEC = cpu->mem[V_IRQ_BRK];
                     IRQ_VEC |= ((word)cpu->mem[V_IRQ_BRK + 1]) << 8;
+                    cpu_reset(cpu);
                 }
                 else
                 {
