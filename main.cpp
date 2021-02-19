@@ -50,6 +50,7 @@ volatile bool cpu_running = false;
 volatile bool cpu_stepping = true;
 volatile unsigned long long cpu_time = 17000; // 17000 us
 uint64_t total_cycles = 0;
+volatile unsigned brk_ptr = 0x10000;
 
 volatile int done = 0;
 
@@ -57,7 +58,7 @@ static ImFont *HexWinFont;
 
 bool show_mem_editor = true;
 bool show_gui_settings = false;
-bool show_help_window = true;
+bool show_help_window = false;
 
 void CPURun();
 void *CPUThread(void *);
@@ -458,6 +459,23 @@ void CPURun()
         cpu->mem[V_IRQ_BRK + 1] = IRQ_VEC >> 8;
     }
     ImGui::PopStyleColor();
+    ImGui::NextColumn();
+    ImGui::Text("Break Ptr: ");
+    ImGui::NextColumn();
+    if (brk_ptr != 0x10000)
+        snprintf(tmp, sizeof(tmp), "0x%04X", brk_ptr);
+    else
+        snprintf(tmp, sizeof(tmp), "INVL");
+    ImGui::PushStyleColor(0, IMCYN);
+    if (ImGui::SelectableInput("brkptr", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
+    {
+        word num = strtoll(tmp, NULL, 16);
+        if (num > MAX_MEM_SZ - 1)
+            brk_ptr = 0x10000; // 1 second
+        else
+            brk_ptr = num;
+    }
+    ImGui::PopStyleColor();
     ImGui::Columns(1);
     ImGui::PushStyleColor(0, IMYLW);
     ImGui::Separator();
@@ -475,6 +493,12 @@ void *CPUThread(void *id)
     {
         if (cpu_running)
         {
+            if (cpu->pc == brk_ptr)
+            {
+                cpu_running = false;
+                cpu_stepping = true;
+                brk_ptr = 0x10000;
+            }
             cpu_exec(cpu);
             if (cpu_stepping)
                 cpu_running = false;
@@ -505,6 +529,16 @@ void CPURegisters(float font_scale)
     ImGui::Text("%s", CYCLE_NAME_6502[cpu->cycle]);
     ImGui::PopFont();
 
+    ImGui::SameLine();
+    ImGui::Text("\t");
+    ImGui::SameLine();
+
+    ImGui::Text("*TMP: ");
+    ImGui::SameLine();
+    ImGui::PushFont(HexWinFont);
+    ImGui::Text("0x%04X", cpu->infer_addr);
+    ImGui::PopFont();
+
     ImGui::Text("X: ");
     ImGui::SameLine();
     ImGui::PushFont(HexWinFont);
@@ -517,6 +551,14 @@ void CPURegisters(float font_scale)
     ImGui::SameLine();
     ImGui::PushFont(HexWinFont);
     ImGui::Text("0x%02X", cpu->y);
+    ImGui::PopFont();
+    ImGui::SameLine();
+    ImGui::Text("\t");
+    ImGui::SameLine();
+    ImGui::Text("TMP: ");
+    ImGui::SameLine();
+    ImGui::PushFont(HexWinFont);
+    ImGui::Text("0x%02X", cpu->mem[cpu->infer_addr]);
     ImGui::PopFont();
     ImGui::Separator();
     ImGui::Text("PC: ");
@@ -564,7 +606,7 @@ void CPURegisters(float font_scale)
     ImGui::NextColumn();
     ImGui::Text("%01X", cpu->v);
     ImGui::NextColumn();
-    ImGui::Text("-");
+    ImGui::Text("%01X", cpu->rsvd);
     ImGui::NextColumn();
     ImGui::Text("%01X", cpu->b);
     ImGui::NextColumn();
@@ -650,6 +692,7 @@ void CodeEditor(bool *active)
         {
             word pcaddr = cpu->pc; // : 0x0;
             word instraddr = cpu->instr_ptr; // : 0x0;
+            word tmpaddr = cpu->infer_addr;
             if (j < 0) // address
             {
                 if (i == 0) // selectable base address
@@ -715,6 +758,11 @@ void CodeEditor(bool *active)
                 else if (local_mem_idx == instraddr)
                 {
                     ImGui::PushStyleColor(0, IMYLW);
+                    colorpushed = true;
+                }
+                else if (local_mem_idx == tmpaddr)
+                {
+                    ImGui::PushStyleColor(0, IMRED);
                     colorpushed = true;
                 }
                 if (!cpu_running)
