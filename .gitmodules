@@ -5,3 +5,6 @@
 	path = imgui
 	url = git@github.com:sunipkmukherjee/imgui.git
 	branch = docking
+[submodule "clkgen"]
+	path = clkgen
+	url = git@github.com:sunipkmukherjee/clkgen.git
