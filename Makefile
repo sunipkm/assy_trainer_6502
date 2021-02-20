@@ -16,7 +16,7 @@ endif
 
 UNAME_S := $(shell uname -s)
 
-CXXFLAGS:= -I include/ -I imgui/include -I mos6502/ -Wall -O2 -fpermissive -std=gnu++11
+CXXFLAGS:= -I include/ -I imgui/include -I clkgen/include -I mos6502/ -Wall -O2 -fpermissive
 LIBS = -lpthread
 
 ifeq ($(UNAME_S), Linux) #LINUX
@@ -24,7 +24,7 @@ ifeq ($(UNAME_S), Linux) #LINUX
 	LIBS += -lGL `pkg-config --static --libs glfw3`
 	LIBEXT= so
 	LINKOPTIONS:= -shared
-	CXXFLAGS += `pkg-config --cflags glfw3`
+	CXXFLAGS += `pkg-config --cflags glfw3` -std=gnu11
 endif
 
 ifeq ($(UNAME_S), Darwin) #APPLE
@@ -49,14 +49,17 @@ COBJS=mos6502/c_6502.o
 
 CPPOBJS=main.o
 
-all: $(GUITARGET) imgui/libimgui_glfw.a
+all: $(GUITARGET) imgui/libimgui_glfw.a clkgen/libclkgen.a
 	$(ECHO) "Built for $(UNAME_S), execute ./$(GUITARGET)"
 
-$(GUITARGET): $(CPPOBJS) $(COBJS) imgui/libimgui_glfw.a
-	$(CXX) $(CXXFLAGS) -o $@ $(CPPOBJS) $(COBJS) imgui/libimgui_glfw.a $(LIBS)
+$(GUITARGET): $(CPPOBJS) $(COBJS) imgui/libimgui_glfw.a clkgen/libclkgen.a
+	$(CXX) $(CXXFLAGS) -o $@ $(CPPOBJS) $(COBJS) imgui/libimgui_glfw.a clkgen/libclkgen.a $(LIBS)
 
 imgui/libimgui_glfw.a:
 	cd $(PWD)/imgui && make -j$(nproc) && cd $(PWD)
+
+clkgen/libclkgen.a:
+	cd $(PWD)/clkgen && make -j$(nproc) && cd $(PWD)
 
 %.o: %.c
 	$(CC) $(EDCFLAGS) -o $@ -c $<
@@ -73,3 +76,4 @@ clean:
 
 spotless: clean
 	cd $(PWD)/imgui && make spotless && cd $(PWD)
+	cd $(PWD)/clkgen && make clean && cd $(PWD)

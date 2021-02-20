@@ -46,11 +46,33 @@ static void glfw_error_callback(int error, const char *description)
 
 cpu_6502 *cpu; // our cpu!
 
+#include "clkgen.h"
+
 volatile bool cpu_running = false;
 volatile bool cpu_stepping = true;
-volatile unsigned long long cpu_time = 17000; // 17000 us
+unsigned long cpufreq = 60; // 60 Hz
+volatile unsigned long long cpu_time = NSEC_PER_SEC / cpufreq; // 17000 us
 uint64_t total_cycles = 0;
 volatile unsigned brk_ptr = 0x10000;
+
+void CPUHandler(clkgen_t clkid, void *data)
+{
+    if (cpu_running)
+    {
+        if (cpu->pc == brk_ptr)
+        {
+            cpu_running = false;
+            cpu_stepping = true;
+            brk_ptr = 0x10000;
+        }
+        cpu_exec(cpu);
+        if (cpu_stepping)
+            cpu_running = false;
+        total_cycles++;
+    }
+}
+
+clkgen_t sysclk = 0;
 
 volatile int done = 0;
 
@@ -109,13 +131,8 @@ int main(int, char **)
     cpu->mem[0xa004] = JMP_ABS;
     cpu->mem[0xa005] = 0x02;
     cpu->mem[0xa006] = 0x80;
-    // set up CPU thread
-    pthread_t cpu_thread;
-    if (pthread_create(&cpu_thread, NULL, &CPUThread, NULL) < 0)
-    {
-        perror("main: Could not set up CPU thread: ");
-        exit(-2);
-    }
+    // Set up clock
+    sysclk = create_clk(cpu_time, CPUHandler, NULL);
     // Setup window
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
@@ -247,8 +264,7 @@ int main(int, char **)
     glfwDestroyWindow(window);
     glfwTerminate();
 
-    done = 1;
-    pthread_join(cpu_thread, NULL);
+    destroy_clk(sysclk);
     free(cpu);
     return 0;
 }
@@ -278,18 +294,22 @@ void CPURun()
     ImGui::Text("%s", cpustatus);
     ImGui::SameLine();
     char tmp[25];
-    ImGui::Text("Instruction Time: ");
+    ImGui::Text("Frequency: ");
     ImGui::SameLine();
-    snprintf(tmp, sizeof(tmp), "%llu ms", cpu_time / 1000);
+    double _cpufreq = cpufreq;
+    snprintf(tmp, sizeof(tmp), "%.2e Hz", _cpufreq);
     ImGui::PushStyleColor(0, IMCYN);
     if (ImGui::SelectableInput("cputime", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
     {
-        unsigned long long num = strtoll(tmp, NULL, 10);
-        if (num > 10 * 60 * 1000)
-            num = 1 * 1000; // 1 second
+        unsigned long num = strtol(tmp, NULL, 10);
+        if (num > 2e6)
+            num = 2e6; // 2 MHz
         if (num == 0)
-            num = 17;
-        cpu_time = num * 1000;
+            num = 60; // 60 Hz
+        cpufreq = num;
+        cpu_time = NSEC_PER_SEC / cpufreq;
+        destroy_clk(sysclk);
+        sysclk = create_clk(cpu_time, CPUHandler, NULL);
     }
     ImGui::PopStyleColor();
     ImGui::Text("Total Cycles: %llu", total_cycles);
@@ -690,7 +710,7 @@ void CodeEditor(bool *active)
         }
         for (int j = -1; j < rc[1]; j++)
         {
-            word pcaddr = cpu->pc; // : 0x0;
+            word pcaddr = cpu->pc;           // : 0x0;
             word instraddr = cpu->instr_ptr; // : 0x0;
             word tmpaddr = cpu->infer_addr;
             if (j < 0) // address
