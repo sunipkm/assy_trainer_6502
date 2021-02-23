@@ -73,6 +73,7 @@ clean:
 	$(RM) $(GUITARGET)
 	$(RM) $(CPPOBJS)
 	$(RM) $(COBJS)
+	$(RM) clkgen/libclkgen.a
 
 spotless: clean
 	cd $(PWD)/imgui && make spotless && cd $(PWD)

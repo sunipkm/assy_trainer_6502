@@ -308,8 +308,7 @@ void CPURun()
             num = 60; // 60 Hz
         cpufreq = num;
         cpu_time = NSEC_PER_SEC / cpufreq;
-        destroy_clk(sysclk);
-        sysclk = create_clk(cpu_time, CPUHandler, NULL);
+        sysclk = update_clk(sysclk, cpu_time);
     }
     ImGui::PopStyleColor();
     ImGui::Text("Total Cycles: %llu", total_cycles);
