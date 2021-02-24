@@ -50,8 +50,8 @@ cpu_6502 *cpu; // our cpu!
 
 volatile bool cpu_running = false;
 volatile bool cpu_stepping = true;
-unsigned long cpufreq = 60; // 60 Hz
-volatile unsigned long long cpu_time = NSEC_PER_SEC / cpufreq; // 17000 us
+unsigned long cpufreq = 1000000;                               // 1 MHz
+volatile unsigned long long cpu_time = NSEC_PER_SEC / cpufreq; // 1 us
 uint64_t total_cycles = 0;
 volatile unsigned brk_ptr = 0x10000;
 
@@ -296,16 +296,33 @@ void CPURun()
     char tmp[25];
     ImGui::Text("Frequency: ");
     ImGui::SameLine();
-    double _cpufreq = cpufreq;
-    snprintf(tmp, sizeof(tmp), "%.2e Hz", _cpufreq);
+    double _cpufreq = 0;
+    if (cpufreq < 500)
+    {
+        snprintf(tmp, sizeof(tmp), "%0lu Hz", cpufreq);
+    }
+    else if (cpufreq < 500000)
+    {
+        _cpufreq = cpufreq * 0.001; // Kilo
+        snprintf(tmp, sizeof(tmp), "%03.2f kHz", _cpufreq);
+    }
+    else // if (cpufreq > 500000)
+    {
+        _cpufreq = cpufreq * 0.001 * 0.001; // Mega
+        snprintf(tmp, sizeof(tmp), "%03.2f MHz", _cpufreq);
+    }
     ImGui::PushStyleColor(0, IMCYN);
     if (ImGui::SelectableInput("cputime", false, ImGuiSelectableFlags_None, tmp, IM_ARRAYSIZE(tmp)))
     {
         unsigned long num = strtol(tmp, NULL, 10);
         if (num > 2e6)
+        {
             num = 2e6; // 2 MHz
+        }
         if (num == 0)
+        {
             num = 60; // 60 Hz
+        }
         cpufreq = num;
         cpu_time = NSEC_PER_SEC / cpufreq;
         sysclk = update_clk(sysclk, cpu_time);
