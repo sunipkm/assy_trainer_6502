@@ -24,7 +24,7 @@ ifeq ($(UNAME_S), Linux) #LINUX
 	LIBS += -lGL `pkg-config --static --libs glfw3`
 	LIBEXT= so
 	LINKOPTIONS:= -shared
-	CXXFLAGS += `pkg-config --cflags glfw3` -std=gnu11
+	CXXFLAGS += `pkg-config --cflags glfw3`
 endif
 
 ifeq ($(UNAME_S), Darwin) #APPLE

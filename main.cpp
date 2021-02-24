@@ -545,7 +545,7 @@ void CPURegisters(float font_scale)
     ImGui::Text("Cycle: ");
     ImGui::SameLine();
     ImGui::PushFont(HexWinFont);
-    ImGui::Text("%s", CYCLE_NAME_6502[cpu->cycle]);
+    ImGui::Text("%s", CYCLE_NAME_6502[(int)cpu->cycle]);
     ImGui::PopFont();
 
     ImGui::SameLine();
