@@ -16,7 +16,7 @@ endif
 
 UNAME_S := $(shell uname -s)
 
-CXXFLAGS:= -I include/ -I imgui/include -I clkgen/include -I mos6502/ -Wall -O2 -fpermissive
+CXXFLAGS:= -I include/ -I imgui/include -I clkgen/include -I mos6502/ -Wall -O2 -fpermissive -std=c++11
 LIBS = -lpthread
 
 ifeq ($(UNAME_S), Linux) #LINUX
