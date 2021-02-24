@@ -50,31 +50,31 @@ COBJS=mos6502/c_6502.o
 CPPOBJS=main.o
 
 all: $(GUITARGET) imgui/libimgui_glfw.a clkgen/libclkgen.a
-	$(ECHO) "Built for $(UNAME_S), execute ./$(GUITARGET)"
+	@$(ECHO) "Built for $(UNAME_S), execute ./$(GUITARGET)"
 
 $(GUITARGET): $(CPPOBJS) $(COBJS) imgui/libimgui_glfw.a clkgen/libclkgen.a
-	$(CXX) $(CXXFLAGS) -o $@ $(CPPOBJS) $(COBJS) imgui/libimgui_glfw.a clkgen/libclkgen.a $(LIBS)
+	@$(CXX) $(CXXFLAGS) -o $@ $(CPPOBJS) $(COBJS) imgui/libimgui_glfw.a clkgen/libclkgen.a $(LIBS)
 
 imgui/libimgui_glfw.a:
-	cd $(PWD)/imgui && make -j$(nproc) && cd $(PWD)
+	@cd $(PWD)/imgui && make -j$(nproc) && cd $(PWD)
 
 clkgen/libclkgen.a:
-	cd $(PWD)/clkgen && make -j$(nproc) && cd $(PWD)
+	@cd $(PWD)/clkgen && make -j$(nproc) && cd $(PWD)
 
 %.o: %.c
-	$(CC) $(EDCFLAGS) -o $@ -c $<
+	@$(CC) $(EDCFLAGS) -o $@ -c $<
 
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) -o $@ -c $<
+	@$(CXX) $(CXXFLAGS) -o $@ -c $<
 
 .PHONY: clean
 
 clean:
-	$(RM) $(GUITARGET)
-	$(RM) $(CPPOBJS)
-	$(RM) $(COBJS)
-	$(RM) clkgen/libclkgen.a
+	@$(RM) $(GUITARGET)
+	@$(RM) $(CPPOBJS)
+	@$(RM) $(COBJS)
+	@$(RM) clkgen/libclkgen.a
 
 spotless: clean
-	cd $(PWD)/imgui && make spotless && cd $(PWD)
-	cd $(PWD)/clkgen && make clean && cd $(PWD)
+	@cd $(PWD)/imgui && make spotless && cd $(PWD)
+	@cd $(PWD)/clkgen && make clean && cd $(PWD)
