@@ -25,6 +25,8 @@
 #endif
 #include <GLFW/glfw3.h>
 
+#include "ImGuiFileDialog.h"
+
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
 // Your own project should not be affected, as you are likely to link with a newer binary of GLFW that is adequate for your version of Visual Studio.
@@ -149,15 +151,15 @@ int main(int, char **)
     ImGuiIO &io = ImGui::GetIO();
     (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    // io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // Enable Docking
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
-    //io.ConfigViewportsNoAutoMerge = true;
-    //io.ConfigViewportsNoTaskBarIcon = true;
+    // io.ConfigViewportsNoAutoMerge = true;
+    // io.ConfigViewportsNoTaskBarIcon = true;
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
-    //ImGui::StyleColorsClassic();
+    // ImGui::StyleColorsClassic();
 
     // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
     ImGuiStyle &style = ImGui::GetStyle();
@@ -178,14 +180,14 @@ int main(int, char **)
     // - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
     // - Read 'docs/FONTS.md' for more instructions and details.
     // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-    //io.Fonts->AddFontDefault();
+    // io.Fonts->AddFontDefault();
     io.Fonts->AddFontFromFileTTF("imgui/font/Roboto-Medium.ttf", FONT_SZ);
     HexWinFont = io.Fonts->AddFontFromFileTTF("imgui/font/FiraCode-Regular.ttf", FONT_SZ);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/ProggyTiny.ttf", 10.0f);
-    //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
-    //IM_ASSERT(font != NULL);
+    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
+    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
+    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/ProggyTiny.ttf", 10.0f);
+    // ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
+    // IM_ASSERT(font != NULL);
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -236,11 +238,11 @@ int main(int, char **)
 
         // If you are using this code with non-legacy OpenGL header/contexts (which you should not, prefer using imgui_impl_opengl3.cpp!!),
         // you may need to backup/reset/restore other state, e.g. for current shader using the commented lines below.
-        //GLint last_program;
-        //glGetIntegerv(GL_CURRENT_PROGRAM, &last_program);
-        //glUseProgram(0);
+        // GLint last_program;
+        // glGetIntegerv(GL_CURRENT_PROGRAM, &last_program);
+        // glUseProgram(0);
         ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
-        //glUseProgram(last_program);
+        // glUseProgram(last_program);
 
         // Update and Render additional Platform Windows
         // (Platform functions may change the current OpenGL context, so we save/restore it to make it easier to paste this code elsewhere.
@@ -442,6 +444,53 @@ void CPURun()
             }
             fclose(fp);
         }
+    }
+    if (ImGui::Button("Load Custom"))
+    {
+        ImGuiFileDialog::Instance()->OpenDialog("ChooseDirDlgKey", "Choose Destination Directory", ".bin", ".");
+    }
+    if (ImGuiFileDialog::Instance()->Display("ChooseDirDlgKey"))
+    {
+        if (ImGuiFileDialog::Instance()->IsOk())
+        {
+            std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
+            printf("Loading binary file: %s\n", filePath.c_str());
+            FILE *fp = NULL;
+            if ((fp = fopen(filePath.c_str(), "rb")) != NULL)
+            {
+                // calculate size
+                fseek(fp, 0, SEEK_END);
+                ssize_t sz = ftell(fp);
+                fseek(fp, 0, SEEK_SET);
+
+                if (sz != 0x10000)
+                {
+                    printf("Binary file size: %ld bytes, which is not equal to %d bytes\n", sz, 0x10000);
+                }
+                else
+                {
+                    ssize_t rdsz = fread(cpu->mem, 1, sz, fp);
+                    if (rdsz == sz)
+                    {
+                        printf("Binary ROM read OK, setting RESET vector to 0xFF00\n");
+                        RESET_VEC = 0xff00;
+                        cpu->mem[V_RESET] = RESET_VEC;
+                        cpu->mem[V_RESET + 1] = RESET_VEC >> 8;
+                        NMI_VEC = cpu->mem[V_NMI];
+                        NMI_VEC |= ((word)cpu->mem[V_NMI + 1]) << 8;
+                        IRQ_VEC = cpu->mem[V_IRQ_BRK];
+                        IRQ_VEC |= ((word)cpu->mem[V_IRQ_BRK + 1]) << 8;
+                        cpu_reset(cpu);
+                    }
+                    else
+                    {
+                        printf("Binary ROM read FAILED, read %ld bytes out of %ld bytes\n", rdsz, sz);
+                    }
+                }
+                fclose(fp);
+            }
+        }
+        ImGuiFileDialog::Instance()->Close();
     }
     ImGui::Separator();
     ImGui::Columns(2, "vector_inputs", false);

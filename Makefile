@@ -35,9 +35,9 @@ ifeq ($(UNAME_S), Darwin) #APPLE
 	LIBS += -arch $(ARCH) -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo
 	LIBS += -L/usr/local/lib -L/opt/local/lib
 	#LIBS += -lglfw3
-	LIBS += -lglfw
+	LIBS += `pkg-config --static --libs glfw3`
 
-	CXXFLAGS += -I/usr/local/include -I/opt/local/include
+	CXXFLAGS += -I/usr/local/include -I/opt/local/include `pkg-config --cflags glfw3`
 	CFLGAS+= -arch $(ARCH)
 endif
 
@@ -47,7 +47,7 @@ GUITARGET=mos6502.out
 
 COBJS=mos6502/c_6502.o
 
-CPPOBJS=main.o
+CPPOBJS=main.o ImGuiFileDialog.o
 
 all: $(GUITARGET) imgui/libimgui_glfw.a clkgen/libclkgen.a
 	@$(ECHO) "Built for $(UNAME_S), execute ./$(GUITARGET)"
